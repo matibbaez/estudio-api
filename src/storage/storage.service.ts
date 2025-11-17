@@ -43,4 +43,22 @@ export class StorageService {
 
     return data.path;
   }
+
+  async createSignedUrl(filePath: string) {
+    console.log(`[StorageService] Generando link temporal para: ${filePath}`);
+    
+    // 1. Le pedimos a Supabase un link firmado (temporal)
+    const { data, error } = await this.supabase.storage
+      .from(this.bucketName) // 'reclamos'
+      .createSignedUrl(filePath, 300); // <-- 300 segundos = 5 minutos de validez
+
+    if (error) {
+      console.error('Error al generar el link temporal:', error);
+      throw new Error(`Error al generar link de Supabase: ${error.message}`);
+    }
+
+    // 2. Devolvemos la URL firmada
+    console.log(`[StorageService] Link generado: ${data.signedUrl}`);
+    return data.signedUrl;
+  }
 }

@@ -7,87 +7,107 @@ import {
   Param,
   Delete,
   UseGuards,
-  UseInterceptors,     // 1. ¡Importamos el Interceptor!
-  UploadedFiles, // 2. ¡Importamos el "atrapa-archivos"!
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
 import { ReclamosService } from './reclamos.service';
 import { CreateReclamoDto } from './dto/create-reclamo.dto';
 import { UpdateReclamoDto } from './dto/update-reclamo.dto';
-import { FileFieldsInterceptor } from '@nestjs/platform-express'; // 3. ¡El interceptor específico!
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
-@Controller('reclamos') // Nuestra URL base es /reclamos
+// Interface Helper (para el tipo de archivo)
+interface IPathsReclamo {
+  dni: 'path_dni';
+  recibo: 'path_recibo';
+  alta: 'path_alta_medica';
+  form1: 'path_form1';
+  form2: 'path_form2';
+}
+
+@Controller('reclamos') // URL base: /reclamos
 export class ReclamosController {
   constructor(private readonly reclamosService: ReclamosService) {}
 
   // ------------------------------------------------------------------
-  // ESTE ES EL ENDPOINT QUE NOS IMPORTA
+  // 1. ENDPOINT: "INICIAR RECLAMO" (Público)
   // ------------------------------------------------------------------
-  @Post() // Escucha en POST /reclamos
+  @Post()
   @UseInterceptors(
+    // Aceptamos los 5 campos de archivo
     FileFieldsInterceptor([
       { name: 'fileDNI', maxCount: 1 },
       { name: 'fileRecibo', maxCount: 1 },
-      { name: 'fileAlta', maxCount: 1 }, // Este es opcional, pero lo aceptamos
-      { name: 'fileForm1', maxCount: 1 }, // <-- ¡Descomentado!
-      { name: 'fileForm2', maxCount: 1 }, // <-- ¡Descomentado!
+      { name: 'fileAlta', maxCount: 1 }, // Opcional
+      { name: 'fileForm1', maxCount: 1 }, // Obligatorio
+      { name: 'fileForm2', maxCount: 1 }, // Obligatorio
     ]),
   )
   create(
-    // 5. Los archivos los "atrapamos" con @UploadedFiles()
     @UploadedFiles() files: {
-      fileDNI?: Express.Multer.File[],
-      fileRecibo?: Express.Multer.File[],
-      fileAlta?: Express.Multer.File[],
-      fileForm1?: Express.Multer.File[],
-      fileForm2?: Express.Multer.File[],
+      fileDNI?: Express.Multer.File[];
+      fileRecibo?: Express.Multer.File[];
+      fileAlta?: Express.Multer.File[];
+      fileForm1?: Express.Multer.File[];
+      fileForm2?: Express.Multer.File[];
     },
-    // 6. Los datos de texto (nombre, dni, email) los atrapamos con @Body()
     @Body() createReclamoDto: CreateReclamoDto,
   ) {
-    // 7. Le pasamos todo al "cerebro" (el servicio)
     return this.reclamosService.create(createReclamoDto, files);
   }
-  // ------------------------------------------------------------------
 
   // ------------------------------------------------------------------
-  // ¡¡¡NUEVO ENDPOINT PARA EL CLIENTE!!!
+  // 2. ENDPOINT: "CONSULTAR TRÁMITE" (Público)
   // ------------------------------------------------------------------
-  // Va a escuchar en: GET http://localhost:3000/reclamos/consultar/A4F8B1
   @Get('consultar/:codigo')
-  consultarPorCodigo(
-    @Param('codigo') codigo: string, // "Atrapamos" el código de la URL
-  ) {
-    // Le pasamos el código al "cerebro" (el service)
+  consultarPorCodigo(@Param('codigo') codigo: string) {
     return this.reclamosService.consultarPorCodigo(codigo);
   }
-  // ------------------------------------------------------------------
 
-  // (El resto de los endpoints que nos generó Nest por ahora no los tocamos)
-  @UseGuards(JwtAuthGuard) // 2. ¡EL "PATOVICA" JWT EN LA PUERTA!
-  @Get() // Escucha en: GET /reclamos
+  // ------------------------------------------------------------------
+  // 3. ENDPOINT: "VER TODOS" (Admin Dashboard)
+  // ------------------------------------------------------------------
+  @UseGuards(JwtAuthGuard) // ¡BLINDADO!
+  @Get()
   findAll() {
-    // 3. Si el token es válido, recién ahí llama al "cerebro".
     return this.reclamosService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.reclamosService.findOne(+id);
-  }
-
-  @UseGuards(JwtAuthGuard) // 1. ¡EL "PATOVICA" JWT EN LA PUERTA!
-  @Patch(':id') // Escucha en: PATCH /reclamos/[ID_DEL_RECLAMO]
+  // ------------------------------------------------------------------
+  // 4. ENDPOINT: "ACTUALIZAR ESTADO" (Admin Modal)
+  // ------------------------------------------------------------------
+  @UseGuards(JwtAuthGuard) // ¡BLINDADO!
+  @Patch(':id')
   update(
-    @Param('id') id: string, // 2. El ID (es string, sacamos el "+")
-    // 3. Solo aceptamos un body que tenga la propiedad 'estado'
+    @Param('id') id: string, // ¡FIX! (no es +id)
     @Body() body: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
   ) {
     return this.reclamosService.update(id, body);
   }
 
+  // ------------------------------------------------------------------
+  // 5. ENDPOINT: "DESCARGAR ARCHIVO" (Admin Modal)
+  // ------------------------------------------------------------------
+  @UseGuards(JwtAuthGuard) // ¡BLINDADO!
+  @Get('descargar/:id/:tipo')
+  async descargarArchivo(
+    @Param('id') id: string,
+    @Param('tipo') tipo: keyof IPathsReclamo,
+  ) {
+    const urlTemporal = await this.reclamosService.getArchivoUrl(id, tipo);
+    return { url: urlTemporal };
+  }
+
+  // ------------------------------------------------------------------
+  // (Métodos generados por Nest, corregidos)
+  // ------------------------------------------------------------------
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.reclamosService.findOne(id); // ¡FIX! (no es +id)
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.reclamosService.remove(+id);
+    return this.reclamosService.remove(id); // ¡FIX! (no es +id)
   }
 }
