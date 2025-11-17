@@ -1,29 +1,35 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config'; // ¡Importamos el Config!
+import { ConfigModule, ConfigService } from '@nestjs/config'; // ¡Importante!
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ReclamosModule } from './reclamos/reclamos.module'; // ¡El módulo que ya teníamos!
 
-import { Reclamo } from './reclamos/entities/reclamo.entity';
-import { StorageService } from './storage/storage.service';
+// --- Nuestros Módulos ---
+import { ReclamosModule } from './reclamos/reclamos.module';
 import { StorageModule } from './storage/storage.module';
+import { UsersModule } from './users/users.module';
+
+// --- Nuestras Entidades (Moldes) ---
+import { Reclamo } from './reclamos/entities/reclamo.entity';
+import { User } from './users/entities/user.entity';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    // 1. Cargamos el módulo de .env PRIMERO y lo hacemos Global
+    // 1. MÓDULO DE CONFIGURACIÓN (.env) - ¡EL QUE FALTABA!
+    // (Tiene que ir PRIMERO y ser Global)
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env', // Le decimos qué archivo leer
+      envFilePath: '.env',
     }),
 
-    // 2. Configuramos TypeORM (la BD)
+    // 2. MÓDULO DE BASE DE DATOS (TypeORM)
     TypeOrmModule.forRootAsync({
-      imports: [ConfigModule], // Importamos el ConfigModule
-      inject: [ConfigService], // Inyectamos el Servicio de Config
+      imports: [ConfigModule], // Le decimos que "depende" del ConfigModule
+      inject: [ConfigService],  // Inyectamos el servicio para leer el .env
       
-      // 3. Usamos una "fábrica" para leer las variables del .env
+      // Usamos la fábrica para leer las variables
       useFactory: async (configService: ConfigService) => ({
         type: 'mysql',
         host: configService.get<string>('DB_HOST'),
@@ -32,16 +38,21 @@ import { StorageModule } from './storage/storage.module';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         
-        entities: [Reclamo],
-        synchronize: true, // ¡Magia! Esto crea las tablas automáticamente (solo para desarrollo)
+        // ¡Cargamos TODOS nuestros moldes!
+        entities: [Reclamo, User],
+        
+        // Sincroniza la BD (crea las tablas) - SOLO PARA DESARROLLO
+        synchronize: true, 
       }),
     }),
 
-    // 3. Nuestro módulo de Reclamos
+    // 3. NUESTROS MÓDULOS DE LÓGICA
     ReclamosModule,
-    StorageModule
+    StorageModule,
+    UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
-  providers: [AppService, StorageService],
+  providers: [AppService],
 })
 export class AppModule {}

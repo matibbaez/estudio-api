@@ -137,16 +137,46 @@ export class ReclamosService {
   // ------------------------------------------------------------------
   // (El resto de los métodos por ahora no los tocamos)
   // ------------------------------------------------------------------
-  findAll() {
-    return `This action returns all reclamos`;
+  async findAll() {
+    console.log('[NestJS] Admin solicitó TODOS los reclamos');
+    
+    // ¡La magia de TypeORM!
+    // Busca en la tabla 'reclamos' y traelos todos,
+    // ordenados por fecha de creación (el más nuevo primero).
+    return this.reclamoRepository.find({
+      order: {
+        fecha_creacion: 'DESC',
+      },
+    });
   }
 
   findOne(id: number) {
     return `This action returns a #${id} reclamo`;
   }
 
-  update(id: number, updateReclamoDto: UpdateReclamoDto) {
-    return `This action updates a #${id} reclamo`;
+  async update(
+    id: string, // ¡OJO! Es 'string' (UUID), no 'number'
+    // Solo vamos a permitir que actualicen el 'estado'
+    updateData: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
+  ) {
+    console.log(`[NestJS] Admin intentando actualizar el reclamo ${id} a estado ${updateData.estado}`);
+
+    // 1. Buscamos el reclamo por su ID (UUID)
+    const reclamo = await this.reclamoRepository.findOne({ where: { id } });
+
+    // 2. Si no existe, tiramos error
+    if (!reclamo) {
+      throw new NotFoundException(`Reclamo con ID ${id} no encontrado`);
+    }
+
+    // 3. Actualizamos el estado
+    reclamo.estado = updateData.estado;
+
+    // 4. Guardamos los cambios en la BD
+    await this.reclamoRepository.save(reclamo);
+
+    console.log(`[NestJS] ¡Reclamo ${id} actualizado!`);
+    return reclamo; // Devolvemos el reclamo actualizado
   }
 
   remove(id: number) {

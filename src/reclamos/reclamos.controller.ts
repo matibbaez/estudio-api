@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
   UseInterceptors,     // 1. ¡Importamos el Interceptor!
   UploadedFiles, // 2. ¡Importamos el "atrapa-archivos"!
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { ReclamosService } from './reclamos.service';
 import { CreateReclamoDto } from './dto/create-reclamo.dto';
 import { UpdateReclamoDto } from './dto/update-reclamo.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express'; // 3. ¡El interceptor específico!
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('reclamos') // Nuestra URL base es /reclamos
 export class ReclamosController {
@@ -62,8 +64,10 @@ export class ReclamosController {
   // ------------------------------------------------------------------
 
   // (El resto de los endpoints que nos generó Nest por ahora no los tocamos)
-  @Get()
+  @UseGuards(JwtAuthGuard) // 2. ¡EL "PATOVICA" JWT EN LA PUERTA!
+  @Get() // Escucha en: GET /reclamos
   findAll() {
+    // 3. Si el token es válido, recién ahí llama al "cerebro".
     return this.reclamosService.findAll();
   }
 
@@ -72,9 +76,14 @@ export class ReclamosController {
     return this.reclamosService.findOne(+id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateReclamoDto: UpdateReclamoDto) {
-    return this.reclamosService.update(+id, updateReclamoDto);
+  @UseGuards(JwtAuthGuard) // 1. ¡EL "PATOVICA" JWT EN LA PUERTA!
+  @Patch(':id') // Escucha en: PATCH /reclamos/[ID_DEL_RECLAMO]
+  update(
+    @Param('id') id: string, // 2. El ID (es string, sacamos el "+")
+    // 3. Solo aceptamos un body que tenga la propiedad 'estado'
+    @Body() body: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
+  ) {
+    return this.reclamosService.update(id, body);
   }
 
   @Delete(':id')
