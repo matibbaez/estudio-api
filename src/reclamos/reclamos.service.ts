@@ -6,17 +6,16 @@ import { CreateReclamoDto } from './dto/create-reclamo.dto';
 import { UpdateReclamoDto } from './dto/update-reclamo.dto';
 import { StorageService } from 'src/storage/storage.service';
 import { randomBytes } from 'crypto';
-import { extname } from 'path'; // ¡Importante para el nombre seguro!
+import { extname } from 'path';
+import { MailService } from 'src/mail/mail.service'; 
 
-// --- ¡NUESTRAS REGLAS DE "BLINDAJE"! ---
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'image/jpeg',
   'image/png',
 ];
 
-// Interface Helper (interna del servicio)
 interface IPathsReclamo {
   dni: 'path_dni';
   recibo: 'path_recibo';
@@ -32,6 +31,7 @@ export class ReclamosService {
     @InjectRepository(Reclamo)
     private readonly reclamoRepository: Repository<Reclamo>,
     private readonly storageService: StorageService,
+    private readonly mailService: MailService, 
   ) {}
 
   // --- Helper function de "Blindaje" ---
@@ -65,13 +65,13 @@ export class ReclamosService {
     console.log('--- ¡NUEVO RECLAMO RECIBIDO! ---');
     console.log('DATOS DE TEXTO (DTO):', createReclamoDto);
 
-    // --- 1. BLINDAJE: Validación de EXISTENCIA ---
+    // 1. Validación de Existencia
     if (!files.fileDNI || !files.fileRecibo || !files.fileForm1 || !files.fileForm2) {
       throw new BadRequestException('Faltan uno o más archivos obligatorios');
     }
 
-    // --- 2. BLINDAJE: Validación de TIPO y TAMAÑO ---
-    console.log('Validando archivos (Tipo y Tamaño)...');
+    // 2. Validación de Tipo y Tamaño
+    console.log('Validando archivos...');
     await this.validateFile(files.fileDNI[0]);
     await this.validateFile(files.fileRecibo[0]);
     await this.validateFile(files.fileForm1[0]);
@@ -83,15 +83,13 @@ export class ReclamosService {
 
     const { dni } = createReclamoDto;
 
-    // --- 3. Generar Código de Seguimiento Único ---
+    // 3. Generar Código
     const codigo_seguimiento = randomBytes(3).toString('hex').toUpperCase();
     console.log(`Generando código: ${codigo_seguimiento}`);
 
-    // --- 4. Subir Archivos a la Bóveda (Supabase) ---
+    // 4. Subir a Supabase
     console.log('Subiendo archivos a Supabase...');
-    const timestamp = Date.now(); 
-
-    // Helper function para crear un nombre 100% seguro
+    const timestamp = Date.now();
     const armarNombreSeguro = (file: Express.Multer.File, campo: string) => {
       const extension = extname(file.originalname);
       return `${dni}-${campo}-${timestamp}${extension}`; 
@@ -110,7 +108,7 @@ export class ReclamosService {
       
     console.log('¡Archivos subidos con éxito!');
 
-    // --- 5. Crear el "Molde" para la BD ---
+    // 5. Guardar en BD
     const nuevoReclamo = this.reclamoRepository.create({
       ...createReclamoDto,
       codigo_seguimiento,
@@ -119,20 +117,37 @@ export class ReclamosService {
       path_recibo,
       path_form1,
       path_form2,
-      path_alta_medica: path_alta_medica, // ¡FIX! (ya es 'string | null')
+      path_alta_medica: path_alta_medica
     });
 
-    // --- 6. Guardar en la Base de Datos (MySQL) ---
     console.log('Guardando registro en MySQL...');
     try {
       await this.reclamoRepository.save(nuevoReclamo);
       console.log('¡Reclamo guardado en BD!');
+      
+      // ------------------------------------------
+      // 6. ¡ENVIAR NOTIFICACIONES POR EMAIL!
+      // ------------------------------------------
+      // a. Al Cliente
+      this.mailService.sendNewReclamoClient(
+        createReclamoDto.email, 
+        createReclamoDto.nombre, 
+        codigo_seguimiento
+      ).catch(e => console.error('Error enviando mail cliente:', e));
+
+      // b. Al Admin
+      this.mailService.sendNewReclamoAdmin({
+        nombre: createReclamoDto.nombre,
+        dni: dni,
+        codigo_seguimiento: codigo_seguimiento
+      }).catch(e => console.error('Error enviando mail admin:', e));
+      // ------------------------------------------
+
     } catch (error) {
       console.error('Error al guardar en BD:', error.message);
       throw new Error(`Error al guardar en Base de Datos: ${error.message}`);
     }
 
-    // --- 7. Devolver el Código al Frontend ---
     return {
       message: '¡Reclamo creado con éxito!',
       codigo_seguimiento: codigo_seguimiento,
@@ -182,7 +197,7 @@ export class ReclamosService {
   // 4. MÉTODO UPDATE (Para el Modal del Admin)
   // ------------------------------------------------------------------
   async update(
-    id: string, // ¡FIX! (es 'string' UUID)
+    id: string,
     updateData: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
   ) {
     console.log(`[NestJS] Admin intentando actualizar el reclamo ${id} a estado ${updateData.estado}`);
@@ -193,10 +208,22 @@ export class ReclamosService {
       throw new NotFoundException(`Reclamo con ID ${id} no encontrado`);
     }
 
+    // Actualizamos
     reclamo.estado = updateData.estado;
     await this.reclamoRepository.save(reclamo);
 
     console.log(`[NestJS] ¡Reclamo ${id} actualizado!`);
+
+    // ------------------------------------------
+    // ¡ENVIAR AVISO AL CLIENTE!
+    // ------------------------------------------
+    this.mailService.sendStatusUpdate(
+      reclamo.email, 
+      reclamo.nombre, 
+      reclamo.estado
+    ).catch(e => console.error('Error enviando mail update:', e));
+    // ------------------------------------------
+
     return reclamo;
   }
 
