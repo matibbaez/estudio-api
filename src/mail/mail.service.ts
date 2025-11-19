@@ -88,7 +88,7 @@ export class MailService {
 
     const html = this.getHtmlTemplate('¡Recibimos tu Reclamo!', contenido, {
       texto: 'Consultar Estado',
-      link: 'https://tusitio.com/consultar-tramite' // ¡PONE TU URL REAL ACÁ!
+      link: 'https://sienna-hornet-478409.hostingersite.com/consultar-tramite'
     });
 
     await this.sendEmail(email, '✅ Reclamo Iniciado Exitosamente', html);
@@ -110,7 +110,7 @@ export class MailService {
 
     const html = this.getHtmlTemplate('🔔 Nuevo Trámite Recibido', contenido, {
       texto: 'Ir al Panel de Admin',
-      link: 'https://tusitio.com/login' // ¡PONE TU URL REAL ACÁ!
+      link: 'https://sienna-hornet-478409.hostingersite.com/login' 
     });
 
     await this.sendEmail('mfbcaneda@gmail.com', `🔔 Nuevo: ${datos.nombre}`, html);
@@ -142,7 +142,7 @@ export class MailService {
 
     const html = this.getHtmlTemplate('📢 Actualización de Estado', contenido, {
       texto: 'Ver Detalles',
-      link: 'https://tusitio.com/consultar-tramite'
+      link: 'https://sienna-hornet-478409.hostingersite.com/consultar-tramite'
     });
 
     await this.sendEmail(email, `Tu trámite está: ${nuevoEstado}`, html);
