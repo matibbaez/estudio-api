@@ -7,11 +7,10 @@ export class MailService {
   private transporter;
 
   constructor(private readonly configService: ConfigService) {
-    // 1. Configuramos el "Transporte" (Gmail)
     this.transporter = nodemailer.createTransport({
       host: this.configService.get<string>('MAIL_HOST'),
-      port: this.configService.get<number>('MAIL_PORT'),
-      secure: false, // true para 465, false para otros puertos
+      port: 465, // <-- FORZAMOS EL PUERTO 465
+      secure: true, // <-- ¡IMPORTANTE! TIENE QUE SER TRUE
       auth: {
         user: this.configService.get<string>('MAIL_USER'),
         pass: this.configService.get<string>('MAIL_PASS'),
@@ -43,8 +42,6 @@ export class MailService {
   // --------------------------------------------------
   async sendNewReclamoAdmin(datos: any) {
     
-    // ¡ACÁ ESTÁ EL CAMBIO!
-    // En lugar de leer del .env, ponemos tu mail directo.
     const adminEmail = 'mfbcaneda@gmail.com'; 
     
     await this.transporter.sendMail({
