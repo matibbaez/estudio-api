@@ -53,7 +53,7 @@ export class MailService {
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">Estudio Jurídico</h2>
+            <h2 style="margin: 0;">Reclamá</h2>
           </div>
           <div class="content">
             <h2 style="color: ${this.colors.primary}; margin-top: 0;">${titulo}</h2>
@@ -62,7 +62,7 @@ export class MailService {
           </div>
           <div class="footer">
             <p>Este es un mensaje automático, por favor no responder.</p>
-            <p>&copy; 2025 Estudio Jurídico. Todos los derechos reservados.</p>
+            <p>&copy; 2025 Reclamá. Todos los derechos reservados.</p>
           </div>
         </div>
       </body>
