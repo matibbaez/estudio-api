@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFiles,
+  Query
 } from '@nestjs/common';
 import { ReclamosService } from './reclamos.service';
 import { CreateReclamoDto } from './dto/create-reclamo.dto';
@@ -67,10 +68,10 @@ export class ReclamosController {
   // ------------------------------------------------------------------
   // 3. ENDPOINT: "VER TODOS" (Admin Dashboard)
   // ------------------------------------------------------------------
-  @UseGuards(JwtAuthGuard) // ¡BLINDADO!
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.reclamosService.findAll();
+  findAll(@Query('estado') estado?: string) {
+    return this.reclamosService.findAll(estado);
   }
 
   // ------------------------------------------------------------------

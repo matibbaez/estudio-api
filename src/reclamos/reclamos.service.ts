@@ -184,11 +184,16 @@ export class ReclamosService {
   // ------------------------------------------------------------------
   // 3. MÉTODO FINDALL (Para el Dashboard del Admin)
   // ------------------------------------------------------------------
-  async findAll() {
-    console.log('[NestJS] Admin solicitó TODOS los reclamos');
+  async findAll(estado?: string) {
+    console.log(`[NestJS] Admin solicitó reclamos. Filtro: ${estado || 'Todos'}`);
+    
+    // 1. Si hay estado, filtramos. Si no, traemos todo.
+    const whereCondition = estado ? { estado } : {};
+
     return this.reclamoRepository.find({
+      where: whereCondition,
       order: {
-        fecha_creacion: 'DESC',
+        fecha_creacion: 'DESC', 
       },
     });
   }
