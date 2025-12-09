@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reclamo } from './entities/reclamo.entity';
 import { CreateReclamoDto } from './dto/create-reclamo.dto';
-import { UpdateReclamoDto } from './dto/update-reclamo.dto';
 import { StorageService } from 'src/storage/storage.service';
 import { randomBytes } from 'crypto';
 import { extname } from 'path';
@@ -22,6 +21,8 @@ interface IPathsReclamo {
   alta: 'path_alta_medica';
   form1: 'path_form1';
   form2: 'path_form2';
+  carta_documento: 'path_carta_documento';
+  revoca: 'path_revoca_patrocinio';
 }
 
 @Injectable()
@@ -34,81 +35,63 @@ export class ReclamosService {
     private readonly mailService: MailService, 
   ) {}
 
-  // --- Helper function de "Blindaje" ---
   private async validateFile(file: Express.Multer.File) {
-    // 1. Chequeo de Tipo
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      console.error(`Error: Tipo de archivo no permitido: ${file.originalname} (${file.mimetype})`);
-      throw new BadRequestException(`Tipo de archivo no permitido: ${file.originalname}. Solo se aceptan PDF, JPG o PNG.`);
+      throw new BadRequestException(`Tipo de archivo no permitido: ${file.originalname}. Solo PDF, JPG, PNG.`);
     }
-    // 2. Chequeo de Tamaño
     if (file.size > MAX_SIZE_BYTES) {
-      console.error(`Error: Archivo demasiado grande: ${file.originalname} (${file.size} bytes)`);
-      throw new BadRequestException(`Archivo demasiado grande: ${file.originalname}. El límite es 5 MB.`);
+      throw new BadRequestException(`Archivo demasiado grande: ${file.originalname}. Límite 5 MB.`);
     }
   }
 
-  // ------------------------------------------------------------------
-  // 1. MÉTODO CREATE (Para "Iniciar Reclamo")
-  // ------------------------------------------------------------------
-  async create(
-    createReclamoDto: CreateReclamoDto,
-    files: {
-      fileDNI?: Express.Multer.File[];
-      fileRecibo?: Express.Multer.File[];
-      fileAlta?: Express.Multer.File[];
-      fileForm1?: Express.Multer.File[];
-      fileForm2?: Express.Multer.File[];
-    },
-  ) {
+  async create(createReclamoDto: CreateReclamoDto, files: any) {
     
-    console.log('--- ¡NUEVO RECLAMO RECIBIDO! ---');
-    console.log('DATOS DE TEXTO (DTO):', createReclamoDto);
-
-    // 1. Validación de Existencia
+    // Validaciones básicas
     if (!files.fileDNI || !files.fileRecibo || !files.fileForm1 || !files.fileForm2) {
-      throw new BadRequestException('Faltan uno o más archivos obligatorios');
+      throw new BadRequestException('Faltan archivos obligatorios');
     }
 
-    // 2. Validación de Tipo y Tamaño
-    console.log('Validando archivos...');
+    // Validar cada archivo
     await this.validateFile(files.fileDNI[0]);
     await this.validateFile(files.fileRecibo[0]);
     await this.validateFile(files.fileForm1[0]);
     await this.validateFile(files.fileForm2[0]);
-    if (files.fileAlta && files.fileAlta.length > 0) {
-      await this.validateFile(files.fileAlta[0]);
-    }
-    console.log('¡Validación de archivos exitosa!');
+    if (files.fileAlta?.[0]) await this.validateFile(files.fileAlta[0]);
+    if (files.fileCartaDocumento?.[0]) await this.validateFile(files.fileCartaDocumento[0]);
+    if (files.fileRevoca?.[0]) await this.validateFile(files.fileRevoca[0]);
 
     const { dni } = createReclamoDto;
-
-    // 3. Generar Código
     const codigo_seguimiento = randomBytes(3).toString('hex').toUpperCase();
-    console.log(`Generando código: ${codigo_seguimiento}`);
-
-    // 4. Subir a Supabase
-    console.log('Subiendo archivos a Supabase...');
     const timestamp = Date.now();
-    const armarNombreSeguro = (file: Express.Multer.File, campo: string) => {
-      const extension = extname(file.originalname);
-      return `${dni}-${campo}-${timestamp}${extension}`; 
-    };
+    
+    const armarNombre = (file: Express.Multer.File, campo: string) => 
+      `${dni}-${campo}-${timestamp}${extname(file.originalname)}`;
 
-    const [path_dni, path_recibo, path_form1, path_form2, path_alta_medica] =
-      await Promise.all([
-        this.storageService.uploadFile(files.fileDNI[0], 'dni', armarNombreSeguro(files.fileDNI[0], 'dni')),
-        this.storageService.uploadFile(files.fileRecibo[0], 'recibo', armarNombreSeguro(files.fileRecibo[0], 'recibo')),
-        this.storageService.uploadFile(files.fileForm1[0], 'form1', armarNombreSeguro(files.fileForm1[0], 'form1')),
-        this.storageService.uploadFile(files.fileForm2[0], 'form2', armarNombreSeguro(files.fileForm2[0], 'form2')),
-        files.fileAlta
-          ? this.storageService.uploadFile(files.fileAlta[0], 'alta', armarNombreSeguro(files.fileAlta[0], 'alta'))
-          : Promise.resolve(null),
-      ]);
-      
-    console.log('¡Archivos subidos con éxito!');
+    // Subida paralela de obligatorios
+    const [path_dni, path_recibo, path_form1, path_form2] = await Promise.all([
+        this.storageService.uploadFile(files.fileDNI[0], 'dni', armarNombre(files.fileDNI[0], 'dni')),
+        this.storageService.uploadFile(files.fileRecibo[0], 'recibo', armarNombre(files.fileRecibo[0], 'recibo')),
+        this.storageService.uploadFile(files.fileForm1[0], 'form1', armarNombre(files.fileForm1[0], 'form1')),
+        this.storageService.uploadFile(files.fileForm2[0], 'form2', armarNombre(files.fileForm2[0], 'form2')),
+    ]);
 
-    // 5. Guardar en BD
+    // --- CORRECCIÓN ACÁ: TIPADO EXPLÍCITO ---
+    let path_alta_medica: string | null = null;
+    if (files.fileAlta?.[0]) {
+      path_alta_medica = await this.storageService.uploadFile(files.fileAlta[0], 'alta', armarNombre(files.fileAlta[0], 'alta'));
+    }
+
+    let path_carta_documento: string | null = null;
+    if (files.fileCartaDocumento?.[0]) {
+      path_carta_documento = await this.storageService.uploadFile(files.fileCartaDocumento[0], 'carta_doc', armarNombre(files.fileCartaDocumento[0], 'carta_doc'));
+    }
+
+    let path_revoca_patrocinio: string | null = null;
+    if (files.fileRevoca?.[0]) {
+      path_revoca_patrocinio = await this.storageService.uploadFile(files.fileRevoca[0], 'revoca', armarNombre(files.fileRevoca[0], 'revoca'));
+    }
+
+    // Guardar en BD
     const nuevoReclamo = this.reclamoRepository.create({
       ...createReclamoDto,
       codigo_seguimiento,
@@ -117,153 +100,51 @@ export class ReclamosService {
       path_recibo,
       path_form1,
       path_form2,
-      path_alta_medica: path_alta_medica
-    });
+      path_alta_medica,
+      path_carta_documento,
+      path_revoca_patrocinio
+    } as any);
 
-    console.log('Guardando registro en MySQL...');
-    try {
-      await this.reclamoRepository.save(nuevoReclamo);
-      console.log('¡Reclamo guardado en BD!');
-      
-      // ------------------------------------------
-      // 6. ¡ENVIAR NOTIFICACIONES POR EMAIL!
-      // ------------------------------------------
-      // a. Al Cliente
-      this.mailService.sendNewReclamoClient(
-        createReclamoDto.email, 
-        createReclamoDto.nombre, 
-        codigo_seguimiento
-      ).catch(e => console.error('Error enviando mail cliente:', e));
+    await this.reclamoRepository.save(nuevoReclamo);
 
-      // b. Al Admin
-      this.mailService.sendNewReclamoAdmin({
-        nombre: createReclamoDto.nombre,
-        dni: dni,
-        codigo_seguimiento: codigo_seguimiento
-      }).catch(e => console.error('Error enviando mail admin:', e));
-      // ------------------------------------------
+    // Mails (sin await para no trabar)
+    this.mailService.sendNewReclamoClient(createReclamoDto.email, createReclamoDto.nombre, codigo_seguimiento).catch(console.error);
+    this.mailService.sendNewReclamoAdmin({ nombre: createReclamoDto.nombre, dni, codigo_seguimiento }).catch(console.error);
 
-    } catch (error) {
-      console.error('Error al guardar en BD:', error.message);
-      throw new Error(`Error al guardar en Base de Datos: ${error.message}`);
-    }
-
-    return {
-      message: '¡Reclamo creado con éxito!',
-      codigo_seguimiento: codigo_seguimiento,
-    };
+    return { message: '¡Éxito!', codigo_seguimiento };
   }
 
-  // ------------------------------------------------------------------
-  // 2. MÉTODO CONSULTAR (Para "Consultar Trámite")
-  // ------------------------------------------------------------------
+  // --- RESTO DE MÉTODOS IGUALES ---
+  
   async consultarPorCodigo(codigo: string) {
-    if (!codigo) {
-      throw new BadRequestException('El código no puede estar vacío');
-    }
-    console.log(`[NestJS] Buscando trámite con código: ${codigo}`);
-
-    const reclamo = await this.reclamoRepository.findOne({
-      where: { codigo_seguimiento: codigo }, 
-    });
-
-    if (!reclamo) {
-      console.log(`[NestJS] Código ${codigo} no encontrado.`);
-      throw new NotFoundException('Código de seguimiento no encontrado');
-    }
-
-    console.log(`[NestJS] ¡Trámite encontrado! Estado: ${reclamo.estado}`);
-    
-    return {
-      codigo_seguimiento: reclamo.codigo_seguimiento,
-      estado: reclamo.estado,
-      fecha_creacion: reclamo.fecha_creacion,
-    };
+    const reclamo = await this.reclamoRepository.findOne({ where: { codigo_seguimiento: codigo } });
+    if (!reclamo) throw new NotFoundException('Código no encontrado');
+    return { codigo_seguimiento: reclamo.codigo_seguimiento, estado: reclamo.estado, fecha_creacion: reclamo.fecha_creacion };
   }
 
-  // ------------------------------------------------------------------
-  // 3. MÉTODO FINDALL (Para el Dashboard del Admin)
-  // ------------------------------------------------------------------
   async findAll(estado?: string) {
-    console.log(`[NestJS] Admin solicitó reclamos. Filtro: ${estado || 'Todos'}`);
-    
-    // 1. Si hay estado, filtramos. Si no, traemos todo.
-    const whereCondition = estado ? { estado } : {};
-
-    return this.reclamoRepository.find({
-      where: whereCondition,
-      order: {
-        fecha_creacion: 'DESC', 
-      },
-    });
+    const where = estado ? { estado } : {};
+    return this.reclamoRepository.find({ where, order: { fecha_creacion: 'DESC' } });
   }
 
-  // ------------------------------------------------------------------
-  // 4. MÉTODO UPDATE (Para el Modal del Admin)
-  // ------------------------------------------------------------------
-  async update(
-    id: string,
-    updateData: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
-  ) {
-    console.log(`[NestJS] Admin intentando actualizar el reclamo ${id} a estado ${updateData.estado}`);
-
+  async update(id: string, body: any) {
     const reclamo = await this.reclamoRepository.findOne({ where: { id } });
-
-    if (!reclamo) {
-      throw new NotFoundException(`Reclamo con ID ${id} no encontrado`);
-    }
-
-    // Actualizamos
-    reclamo.estado = updateData.estado;
+    if (!reclamo) throw new NotFoundException('No encontrado');
+    reclamo.estado = body.estado;
     await this.reclamoRepository.save(reclamo);
-
-    console.log(`[NestJS] ¡Reclamo ${id} actualizado!`);
-
-    // ------------------------------------------
-    // ¡ENVIAR AVISO AL CLIENTE!
-    // ------------------------------------------
-    this.mailService.sendStatusUpdate(
-      reclamo.email, 
-      reclamo.nombre, 
-      reclamo.estado
-    ).catch(e => console.error('Error enviando mail update:', e));
-    // ------------------------------------------
-
+    this.mailService.sendStatusUpdate(reclamo.email, reclamo.nombre, reclamo.estado).catch(console.error);
     return reclamo;
   }
 
-  // ------------------------------------------------------------------
-  // 5. MÉTODO GET ARCHIVO (Para el Modal del Admin)
-  // ------------------------------------------------------------------
-  async getArchivoUrl(
-    reclamoId: string, 
-    tipoArchivo: keyof IPathsReclamo 
-  ) {
-    console.log(`[ReclamosService] Buscando archivo tipo "${tipoArchivo}" para reclamo ID: ${reclamoId}`);
-
-    const reclamo = await this.reclamoRepository.findOne({ where: { id: reclamoId } });
-    if (!reclamo) {
-      throw new NotFoundException(`Reclamo con ID ${reclamoId} no encontrado`);
-    }
-
-    const pathKey = `path_${tipoArchivo}` as keyof Reclamo;
-    const filePath = reclamo[pathKey] as string; 
-
-    if (!filePath) {
-      throw new NotFoundException(`El archivo "${tipoArchivo}" no existe para este reclamo.`);
-    }
-
-    return this.storageService.createSignedUrl(filePath);
+  async getArchivoUrl(id: string, tipo: keyof IPathsReclamo) {
+    const reclamo = await this.reclamoRepository.findOne({ where: { id } });
+    if (!reclamo) throw new NotFoundException('Reclamo no encontrado');
+    const pathKey = `path_${tipo}` as keyof Reclamo;
+    const path = reclamo[pathKey] as string;
+    if (!path) throw new NotFoundException('Archivo no existe');
+    return this.storageService.createSignedUrl(path);
   }
 
-  // ------------------------------------------------------------------
-  // 6. (Métodos generados por Nest, corregidos)
-  // ------------------------------------------------------------------
-  findOne(id: string) { // ¡FIX! (es 'string' UUID)
-    return this.reclamoRepository.findOne({ where: { id } });
-  }
-
-  remove(id: string) { // ¡FIX! (es 'string' UUID)
-    return this.reclamoRepository.delete(id);
-  }
+  findOne(id: string) { return this.reclamoRepository.findOne({ where: { id } }); }
+  remove(id: string) { return this.reclamoRepository.delete(id); }
 }

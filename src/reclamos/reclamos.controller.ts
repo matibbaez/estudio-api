@@ -24,6 +24,8 @@ interface IPathsReclamo {
   alta: 'path_alta_medica';
   form1: 'path_form1';
   form2: 'path_form2';
+  carta_documento: 'path_carta_documento';
+  revoca: 'path_revoca_patrocinio';
 }
 
 @Controller('reclamos') // URL base: /reclamos
@@ -34,25 +36,28 @@ export class ReclamosController {
   // 1. ENDPOINT: "INICIAR RECLAMO" (Público)
   // ------------------------------------------------------------------
   @Post()
-  @UseInterceptors(
-    // Aceptamos los 5 campos de archivo
-    FileFieldsInterceptor([
-      { name: 'fileDNI', maxCount: 1 },
-      { name: 'fileRecibo', maxCount: 1 },
-      { name: 'fileAlta', maxCount: 1 }, // Opcional
-      { name: 'fileForm1', maxCount: 1 }, // Obligatorio
-      { name: 'fileForm2', maxCount: 1 }, // Obligatorio
-    ]),
-  )
-  create(
-    @UploadedFiles() files: {
-      fileDNI?: Express.Multer.File[];
-      fileRecibo?: Express.Multer.File[];
-      fileAlta?: Express.Multer.File[];
-      fileForm1?: Express.Multer.File[];
-      fileForm2?: Express.Multer.File[];
-    },
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'fileDNI', maxCount: 1 },
+    { name: 'fileRecibo', maxCount: 1 },
+    { name: 'fileForm1', maxCount: 1 },
+    { name: 'fileForm2', maxCount: 1 },
+    { name: 'fileAlta', maxCount: 1 },
+    // --- AGREGÁ ESTOS DOS ---
+    { name: 'fileCartaDocumento', maxCount: 1 },
+    { name: 'fileRevoca', maxCount: 1 }, 
+  ]))
+  async create(
     @Body() createReclamoDto: CreateReclamoDto,
+    @UploadedFiles() files: { 
+      fileDNI?: Express.Multer.File[], 
+      fileRecibo?: Express.Multer.File[], 
+      fileForm1?: Express.Multer.File[], 
+      fileForm2?: Express.Multer.File[],
+      fileAlta?: Express.Multer.File[],
+      // Agregalos acá al tipo también para que no chille TypeScript
+      fileCartaDocumento?: Express.Multer.File[],
+      fileRevoca?: Express.Multer.File[]
+    },
   ) {
     return this.reclamosService.create(createReclamoDto, files);
   }
