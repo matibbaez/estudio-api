@@ -136,13 +136,42 @@ export class ReclamosService {
     return reclamo;
   }
 
-  async getArchivoUrl(id: string, tipo: keyof IPathsReclamo) {
-    const reclamo = await this.reclamoRepository.findOne({ where: { id } });
-    if (!reclamo) throw new NotFoundException('Reclamo no encontrado');
-    const pathKey = `path_${tipo}` as keyof Reclamo;
-    const path = reclamo[pathKey] as string;
-    if (!path) throw new NotFoundException('Archivo no existe');
-    return this.storageService.createSignedUrl(path);
+  async getArchivoUrl(reclamoId: string, tipoArchivo: string) {
+    
+    console.log(`[ReclamosService] Solicitud de descarga: ID=${reclamoId}, TIPO=${tipoArchivo}`);
+
+    const mapaColumnas: Record<string, keyof Reclamo> = {
+      'dni': 'path_dni',
+      'recibo': 'path_recibo',
+      'form1': 'path_form1',
+      'form2': 'path_form2',
+      'alta': 'path_alta_medica',           
+      'carta_documento': 'path_carta_documento',
+      'revoca': 'path_revoca_patrocinio'   
+    };
+
+    const columnaBd = mapaColumnas[tipoArchivo];
+
+    if (!columnaBd) {
+      throw new BadRequestException(`El tipo de archivo '${tipoArchivo}' no es válido.`);
+    }
+
+    const reclamo = await this.reclamoRepository.findOne({ where: { id: reclamoId } });
+    
+    if (!reclamo) {
+      throw new NotFoundException(`Reclamo con ID ${reclamoId} no encontrado`);
+    }
+
+    // Obtenemos el path usando la columna correcta
+    const filePath = reclamo[columnaBd] as string; 
+
+    if (!filePath) {
+      console.error(`[Error] El archivo no existe en la columna ${columnaBd}`);
+      throw new NotFoundException(`El archivo no existe para este reclamo.`);
+    }
+
+    // Generamos la URL firmada
+    return this.storageService.createSignedUrl(filePath);
   }
 
   findOne(id: string) { return this.reclamoRepository.findOne({ where: { id } }); }
