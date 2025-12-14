@@ -40,15 +40,31 @@ export class Reclamo {
   @Column({ nullable: true }) 
   path_alta_medica: string;
 
+  // --- DATOS DEL TRAMITE ---
   @Column({ nullable: true }) 
   tipo_tramite: string; 
 
   @Column({ nullable: true }) 
   subtipo_tramite: string;
 
+  // --- CAMPOS NUEVOS PARA RECHAZO (TEXTO) ---
+  @Column({ nullable: true })
+  jornada_laboral: string;
+
+  @Column({ nullable: true })
+  direccion_laboral: string;
+
+  @Column({ nullable: true })
+  trayecto_habitual: string;
+
+  // --- ARCHIVOS ESPECÍFICOS ---
   @Column({ nullable: true }) 
   path_carta_documento: string;
 
   @Column({ nullable: true }) 
   path_revoca_patrocinio: string;
+  
+  // Nuevo campo booleano para saber facil si tenía abogado
+  @Column({ default: false })
+  tiene_abogado_anterior: boolean;
 }

@@ -46,7 +46,7 @@ export class ReclamosService {
 
   async create(createReclamoDto: CreateReclamoDto, files: any) {
     
-    // Validaciones básicas
+    // Validaciones básicas de archivos obligatorios
     if (!files.fileDNI || !files.fileRecibo || !files.fileForm1 || !files.fileForm2) {
       throw new BadRequestException('Faltan archivos obligatorios');
     }
@@ -64,6 +64,7 @@ export class ReclamosService {
     const codigo_seguimiento = randomBytes(3).toString('hex').toUpperCase();
     const timestamp = Date.now();
     
+    // Helper para nombrar archivos
     const armarNombre = (file: Express.Multer.File, campo: string) => 
       `${dni}-${campo}-${timestamp}${extname(file.originalname)}`;
 
@@ -75,7 +76,7 @@ export class ReclamosService {
         this.storageService.uploadFile(files.fileForm2[0], 'form2', armarNombre(files.fileForm2[0], 'form2')),
     ]);
 
-    // --- CORRECCIÓN ACÁ: TIPADO EXPLÍCITO ---
+    // Subidas opcionales
     let path_alta_medica: string | null = null;
     if (files.fileAlta?.[0]) {
       path_alta_medica = await this.storageService.uploadFile(files.fileAlta[0], 'alta', armarNombre(files.fileAlta[0], 'alta'));
@@ -93,7 +94,11 @@ export class ReclamosService {
 
     // Guardar en BD
     const nuevoReclamo = this.reclamoRepository.create({
-      ...createReclamoDto,
+      ...createReclamoDto, // Esto expande: nombre, dni, email, tipo_tramite, subtipo, jornada, direccion, trayecto
+      
+      // IMPORTANTE: Convertimos el string "true" a boolean real
+      tiene_abogado_anterior: createReclamoDto.tiene_abogado_anterior === 'true',
+      
       codigo_seguimiento,
       estado: 'Recibido',
       path_dni,
@@ -109,7 +114,14 @@ export class ReclamosService {
 
     // Mails (sin await para no trabar)
     this.mailService.sendNewReclamoClient(createReclamoDto.email, createReclamoDto.nombre, codigo_seguimiento).catch(console.error);
-    this.mailService.sendNewReclamoAdmin({ nombre: createReclamoDto.nombre, dni, codigo_seguimiento }).catch(console.error);
+    
+    // Al admin le mandamos también el TIPO de trámite para que sepa si es Rechazo o Alta
+    this.mailService.sendNewReclamoAdmin({ 
+        nombre: createReclamoDto.nombre, 
+        dni, 
+        codigo_seguimiento,
+        tipo: createReclamoDto.tipo_tramite 
+    }).catch(console.error);
 
     return { message: '¡Éxito!', codigo_seguimiento };
   }
@@ -162,7 +174,6 @@ export class ReclamosService {
       throw new NotFoundException(`Reclamo con ID ${reclamoId} no encontrado`);
     }
 
-    // Obtenemos el path usando la columna correcta
     const filePath = reclamo[columnaBd] as string; 
 
     if (!filePath) {
