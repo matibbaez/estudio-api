@@ -157,7 +157,7 @@ export class MailService {
         subject: subject,
         html: html,
       });
-      console.log(`✅ Mail enviado a ${to}`);
+      // console.log(`✅ Mail enviado a ${to}`);
     } catch (error) {
       console.error('❌ Error enviando mail:', error);
     }

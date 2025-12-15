@@ -30,6 +30,7 @@ export class CreateReclamoDto {
   @IsEmail()
   @IsNotEmpty()
   email: string;
+  
 
   // --- LOS NUEVOS CAMPOS OBLIGATORIOS PARA LA LÓGICA ---
   

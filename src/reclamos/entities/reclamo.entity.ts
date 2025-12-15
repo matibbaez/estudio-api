@@ -27,14 +27,14 @@ export class Reclamo {
   // --- ARCHIVOS BASE ---
   @Column() 
   path_dni: string;
-  
-  @Column() 
+
+  @Column({ nullable: true }) // <--- AGREGALE ESTO
   path_recibo: string;
-  
-  @Column() 
+
+  @Column({ nullable: true }) // <--- AGREGALE ESTO
   path_form1: string;
-  
-  @Column() 
+
+  @Column({ nullable: true }) // <--- AGREGALE ESTO
   path_form2: string;
   
   @Column({ nullable: true }) 
