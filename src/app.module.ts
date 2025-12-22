@@ -1,16 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config'; // ¡Importante!
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import * as Joi from 'joi'; // 1. Importamos Joi
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-
-// --- Nuestros Módulos ---
 import { ReclamosModule } from './reclamos/reclamos.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
-
-// --- Nuestras Entidades (Moldes) ---
 import { Reclamo } from './reclamos/entities/reclamo.entity';
 import { User } from './users/entities/user.entity';
 import { AuthModule } from './auth/auth.module';
@@ -18,19 +15,31 @@ import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
-    // 1. MÓDULO DE CONFIGURACIÓN (.env) - ¡EL QUE FALTABA!
-    // (Tiene que ir PRIMERO y ser Global)
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      // 2. AQUÍ AGREGAMOS LA VALIDACIÓN
+      validationSchema: Joi.object({
+        // Base de Datos
+        DB_HOST: Joi.string().required(),
+        DB_PORT: Joi.number().default(5432),
+        DB_USER: Joi.string().required(),
+        DB_PASS: Joi.string().required(),
+        DB_NAME: Joi.string().required(),
+        
+        // Supabase (Storage)
+        SUPABASE_URL: Joi.string().required(),
+        SUPABASE_SERVICE_ROLE_KEY: Joi.string().required(),
+        SUPABASE_BUCKET_NAME: Joi.string().required(),
+        
+        // JWT (Seguridad) - ¡Asegúrate de tener esto en tu .env!
+        JWT_SECRET: Joi.string().required(), 
+      }),
     }),
 
-    // 2. MÓDULO DE BASE DE DATOS (TypeORM)
     TypeOrmModule.forRootAsync({
-      imports: [ConfigModule], // Le decimos que "depende" del ConfigModule
-      inject: [ConfigService],  // Inyectamos el servicio para leer el .env
-      
-      // Usamos la fábrica para leer las variables
+      imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         type: 'postgres',
         host: configService.get<string>('DB_HOST'),
@@ -38,16 +47,11 @@ import { MailModule } from './mail/mail.module';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        
-        // ¡Cargamos TODOS nuestros moldes!
         entities: [Reclamo, User],
-        
-        // Sincroniza la BD (crea las tablas) - SOLO PARA DESARROLLO
-        synchronize: true, 
+        synchronize: true, // Recuerda: poner en false en producción real
       }),
     }),
 
-    // 3. NUESTROS MÓDULOS DE LÓGICA
     ReclamosModule,
     StorageModule,
     UsersModule,
