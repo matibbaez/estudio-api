@@ -48,7 +48,7 @@ import { MailModule } from './mail/mail.module';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         entities: [Reclamo, User],
-        synchronize: true, // Recuerda: poner en false en producción real
+        synchronize: false, 
       }),
     }),
 
