@@ -2,52 +2,61 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { UsersService } from './users/users.service';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'; // 1. Importar Swagger
-import helmet from 'helmet'; // 2. Importar Helmet
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // --- SEGURIDAD (Helmet) ---
+  // 1. SEGURIDAD: Helmet protege tu app de vulnerabilidades web conocidas
   app.use(helmet()); 
 
-  // --- CORS ---
-  app.enableCors();
+  // 2. SEGURIDAD: CORS configurado para SOLO aceptar a tu web oficial
+  app.enableCors({
+    origin: [
+      'https://reclamarte.ar',       
+      'https://www.reclamarte.ar',   
+      'http://localhost:4200',       
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
 
+  // 3. VALIDACIÓN: Limpieza automática de datos entrantes
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true, // Elimina datos que no estén en los DTOs
-    forbidNonWhitelisted: true, // Tira error si mandan datos de más
+    whitelist: true, // Elimina campos que no estén en los DTO
+    forbidNonWhitelisted: true, // Tira error si envían datos extra
   }));
 
-  // --- DOCUMENTACIÓN (Swagger) ---
+  // 4. DOCUMENTACIÓN: Swagger disponible en /api/docs
   const config = new DocumentBuilder()
-    .setTitle('API Estudio Jurídico')
-    .setDescription('Documentación de la API para gestión de reclamos y usuarios')
+    .setTitle('API Reclamarte')
+    .setDescription('Documentación de la API para gestión de reclamos')
     .setVersion('1.0')
-    .addBearerAuth() 
+    .addBearerAuth() // Botón para probar con Token JWT
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document); 
 
-  // --- SCRIPT DE SIEMBRA (Tu código original) ---
+  // 5. SCRIPT DE SIEMBRA: Crea el usuario Admin si no existe
   const usersService = app.get(UsersService);
-  const adminEmail = 'admin@estudio.com';
+  const adminEmail = 'admin@estudio.com'; 
   const adminUser = await usersService.findOneByEmail(adminEmail);
 
   if (!adminUser) {
-    console.log('¡Admin no encontrado! Creando usuario admin...');
+    console.log('⚠️ Admin no encontrado. Creando usuario admin inicial...');
     await usersService.create({
       email: adminEmail,
       nombre: 'Admin Estudio',
-      password: 'PasswordSeguro123!', 
+      password: 'PasswordSeguro123!',
     });
-    console.log('¡Usuario admin creado con éxito!');
+    console.log('✅ ¡Usuario admin creado con éxito!');
   } else {
-    console.log('Usuario admin ya existe. Saltando siembra.');
+    console.log('✅ El usuario admin ya existe.');
   }
 
   await app.listen(3000);
-  console.log(`Aplicación corriendo en: http://localhost:3000`);
-  console.log(`Documentación disponible en: http://localhost:3000/api/docs`);
+  console.log(`🚀 API corriendo en el puerto 3000`);
+  console.log(`📄 Documentación Swagger: http://localhost:3000/api/docs`);
 }
 bootstrap();
