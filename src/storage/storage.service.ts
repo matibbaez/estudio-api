@@ -1,64 +1,76 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class StorageService {
-  private supabase: SupabaseClient;
-  private bucketName: string; // Añadimos esto para ser explícitos
+  private s3Client: S3Client;
+  private bucketName: string;
 
   constructor(private readonly configService: ConfigService) {
-    const supabaseUrl = configService.get<string>('SUPABASE_URL');
-    // ¡CAMBIO AQUÍ! Usamos la clave de rol de servicio
-    const supabaseServiceRoleKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
-    this.bucketName = configService.get<string>('SUPABASE_BUCKET_NAME')!; // Obtenemos el nombre del bucket
+    const accountId = configService.get<string>('R2_ACCOUNT_ID');
+    const accessKeyId = configService.get<string>('R2_ACCESS_KEY_ID');
+    const secretAccessKey = configService.get<string>('R2_SECRET_ACCESS_KEY');
+    this.bucketName = configService.get<string>('R2_BUCKET_NAME')!;
 
-    if (!supabaseUrl || !supabaseServiceRoleKey || !this.bucketName) {
-      throw new Error('Error: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY o SUPABASE_BUCKET_NAME no están definidas en el archivo .env');
+    // Validación rápida para que no arranque si faltan variables
+    if (!accountId || !accessKeyId || !secretAccessKey || !this.bucketName) {
+      throw new Error('Error: Faltan variables de entorno de Cloudflare R2 (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY o R2_BUCKET_NAME) en el archivo .env');
     }
 
-    // Creamos el cliente con la clave de servicio
-    this.supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    // Inicializamos el cliente S3 apuntando a Cloudflare
+    this.s3Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
   }
 
   async uploadFile(
     file: Express.Multer.File,
     folder: string,
     fileName: string,
-  ) {
-    const filePath = `${folder}/${fileName}`;
+  ): Promise<string> {
+    // Armamos la ruta final, ej: "dni/12345678-dni-1748291.pdf"
+    const key = `${folder}/${fileName}`;
 
-    const { data, error } = await this.supabase.storage
-      .from(this.bucketName) // Usamos la variable del bucket name
-      .upload(filePath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          // R2 no necesita ACL públicos, se maneja con URLs firmadas
+        }),
+      );
 
-    if (error) {
-      // Log más detallado para debug
-      console.error('Error de Supabase al subir archivo:', error);
-      throw new Error(`Error al subir archivo: ${error.message}`);
+      // Retornamos el "Key" (la ruta) para guardarlo en la DB de Supabase tal cual como hacías antes
+      return key;
+    } catch (error) {
+      console.error('Error subiendo archivo a R2:', error);
+      throw new InternalServerErrorException(`No se pudo subir el archivo a R2: ${error.message}`);
     }
-
-    return data.path;
   }
 
-  async createSignedUrl(filePath: string) {
-    // console.log(`[StorageService] Generando link temporal para: ${filePath}`);
-    
-    // 1. Le pedimos a Supabase un link firmado (temporal)
-    const { data, error } = await this.supabase.storage
-      .from(this.bucketName) // 'reclamos'
-      .createSignedUrl(filePath, 300); // <-- 300 segundos = 5 minutos de validez
+  async createSignedUrl(filePath: string): Promise<string> {
+    try {
+      // Generamos una URL temporal válida por 1 hora (3600 segundos)
+      // Esto es mucho más seguro y rápido que lo de Supabase
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: filePath,
+      });
 
-    if (error) {
-      console.error('Error al generar el link temporal:', error);
-      throw new Error(`Error al generar link de Supabase: ${error.message}`);
+      const url = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+      return url;
+    } catch (error) {
+      console.error('Error generando URL firmada R2:', error);
+      throw new InternalServerErrorException('Error al generar el link de descarga');
     }
-
-    // 2. Devolvemos la URL firmada
-    // console.log(`[StorageService] Link generado: ${data.signedUrl}`);
-    return data.signedUrl;
   }
 }
