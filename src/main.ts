@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { UsersService } from './users/users.service';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DataSource } from 'typeorm'; // <-- 1. Importamos DataSource
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -58,5 +59,19 @@ async function bootstrap() {
   await app.listen(3000);
   console.log(`🚀 API corriendo en el puerto 3000`);
   console.log(`📄 Documentación Swagger: http://localhost:3000/api/docs`);
+
+  // --- 💡 LÓGICA KEEP-ALIVE PARA SUPABASE ---
+  // 2. Obtenemos la conexión a la base de datos
+  const dataSource = app.get(DataSource);
+  
+  // 3. Hacemos el ping cada 1 hora (1000 ms * 60 s * 60 m)
+  setInterval(async () => {
+    try {
+      await dataSource.query('SELECT 1');
+      console.log('✨ Keep-alive: Ping exitoso a Supabase para evitar pausa.');
+    } catch (e) {
+      console.error('❌ Error en el Keep-alive de Supabase:', e.message);
+    }
+  }, 1000 * 60 * 60); 
 }
 bootstrap();
