@@ -65,13 +65,34 @@ async function bootstrap() {
   const dataSource = app.get(DataSource);
   
   // 3. Hacemos el ping cada 1 hora (1000 ms * 60 s * 60 m)
+  // --- 💡 LÓGICA KEEP-ALIVE PARA SUPABASE (VÍA API REST) ---
   setInterval(async () => {
     try {
-      await dataSource.query('SELECT 1');
-      console.log('✨ Keep-alive: Ping exitoso a Supabase para evitar pausa.');
+      // Tomamos las variables que ya tenés en tu .env validadas en el AppModule
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (supabaseUrl && supabaseKey) {
+        // Le pegamos a la API REST de Supabase, esto SÍ resetea el contador
+        const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+          method: 'GET',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`
+          }
+        });
+        
+        if (response.ok) {
+          console.log('✨ Keep-alive: Ping HTTP exitoso a la API de Supabase.');
+        } else {
+          console.error('❌ Keep-alive: Supabase respondió con error:', response.statusText);
+        }
+      } else {
+        console.warn('⚠️ Keep-alive: Faltan variables de Supabase en el .env');
+      }
     } catch (e) {
       console.error('❌ Error en el Keep-alive de Supabase:', e.message);
     }
-  }, 1000 * 60 * 60); 
+  }, 1000 * 60 * 60); // Se ejecuta cada 1 hora
 }
 bootstrap();
