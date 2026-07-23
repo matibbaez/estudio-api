@@ -16,6 +16,8 @@ async function bootstrap() {
     origin: [
       'https://reclamarte.ar',       
       'https://www.reclamarte.ar',   
+      'https://www.reclamarte-demo.vercel.app',   
+      'https://reclamarte-demo.vercel.app',   
       'http://localhost:4200',       
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
