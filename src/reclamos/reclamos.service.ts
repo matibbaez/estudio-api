@@ -19,8 +19,7 @@ interface IPathsReclamo {
   dni: 'path_dni';
   recibo: 'path_recibo';
   alta: 'path_alta_medica';
-  form1: 'path_form1';
-  form2: 'path_form2';
+  formSRT: 'path_form_srt';
   carta_documento: 'path_carta_documento';
   revoca: 'path_revoca_patrocinio';
 }
@@ -54,26 +53,20 @@ export class ReclamosService {
 
     // B. VALIDACIÓN POR TIPO
     if (tipo === 'Medico') {
-      // Médico: Pide Alta.
       if (!files.fileAlta) throw new BadRequestException('Falta el Alta Médica.');
     }
     else if (tipo === 'Incapacidad') {
-      // Incapacidad: Pide TODO.
       if (!files.fileAlta) throw new BadRequestException('Falta el Alta Médica.');
       if (!files.fileRecibo) throw new BadRequestException('Falta el Recibo de Sueldo.');
-      if (!files.fileForm1) throw new BadRequestException('Falta el Formulario 1.');
-      if (!files.fileForm2) throw new BadRequestException('Falta el Formulario 2.');
+      if (!files.fileFormSRT) throw new BadRequestException('Falta el Formulario SRT.');
     }
     else if (tipo === 'Rechazo') {
-      // Rechazo: Pide Carta, Recibo, Forms. NO Alta.
       if (!files.fileCartaDocumento) throw new BadRequestException('Falta la Carta Documento.');
       if (!files.fileRecibo) throw new BadRequestException('Falta el Recibo de Sueldo.');
-      if (!files.fileForm1) throw new BadRequestException('Falta el Formulario 1.');
-      if (!files.fileForm2) throw new BadRequestException('Falta el Formulario 2.');
+      if (!files.fileFormSRT) throw new BadRequestException('Falta el Formulario SRT.');
     }
 
     // C. VALIDACIÓN ABOGADO ANTERIOR (REVOCA)
-    // El DTO ya validamos que es string 'true' o 'false'
     if (createReclamoDto.tiene_abogado_anterior === 'true') {
       if (!files.fileRevoca) throw new BadRequestException('Falta la carta de Revoca.');
     }
@@ -82,8 +75,7 @@ export class ReclamosService {
     const todosLosArchivos = [
       files.fileDNI?.[0],
       files.fileRecibo?.[0],
-      files.fileForm1?.[0],
-      files.fileForm2?.[0],
+      files.fileFormSRT?.[0],
       files.fileAlta?.[0],
       files.fileCartaDocumento?.[0],
       files.fileRevoca?.[0]
@@ -101,26 +93,16 @@ export class ReclamosService {
     const armarNombre = (file: Express.Multer.File, campo: string) =>
       `${dni}-${campo}-${timestamp}${extname(file.originalname)}`;
 
-    // Subimos uno por uno los que existan (más seguro que Promise.all fijo)
-    // DNI es obligatorio, así que siempre tendrá valor string
     const path_dni = await this.storageService.uploadFile(files.fileDNI[0], 'dni', armarNombre(files.fileDNI[0], 'dni'));
-
-    // --- Subidas opcionales (FIX DE TIPADO) ---
-    // Definimos explícitamente el tipo: string | null para evitar el error TS2322
 
     let path_recibo: string | null = null;
     if (files.fileRecibo) {
       path_recibo = await this.storageService.uploadFile(files.fileRecibo[0], 'recibo', armarNombre(files.fileRecibo[0], 'recibo'));
     }
 
-    let path_form1: string | null = null;
-    if (files.fileForm1) {
-      path_form1 = await this.storageService.uploadFile(files.fileForm1[0], 'form1', armarNombre(files.fileForm1[0], 'form1'));
-    }
-
-    let path_form2: string | null = null;
-    if (files.fileForm2) {
-      path_form2 = await this.storageService.uploadFile(files.fileForm2[0], 'form2', armarNombre(files.fileForm2[0], 'form2'));
+    let path_form_srt: string | null = null;
+    if (files.fileFormSRT) {
+      path_form_srt = await this.storageService.uploadFile(files.fileFormSRT[0], 'form_srt', armarNombre(files.fileFormSRT[0], 'form_srt'));
     }
 
     let path_alta_medica: string | null = null;
@@ -138,21 +120,19 @@ export class ReclamosService {
       path_revoca_patrocinio = await this.storageService.uploadFile(files.fileRevoca[0], 'revoca', armarNombre(files.fileRevoca[0], 'revoca'));
     }
 
-
     // 4. GUARDAR EN BD
     const nuevoReclamo = this.reclamoRepository.create({
       ...createReclamoDto,
-      tiene_abogado_anterior: createReclamoDto.tiene_abogado_anterior === 'true', // Convertir a boolean
+      tiene_abogado_anterior: createReclamoDto.tiene_abogado_anterior === 'true', 
       codigo_seguimiento,
       estado: 'Recibido',
       path_dni,
-      path_recibo,         // Puede ser null
-      path_form1,          // Puede ser null
-      path_form2,          // Puede ser null
-      path_alta_medica,    // Puede ser null
-      path_carta_documento,// Puede ser null
-      path_revoca_patrocinio // Puede ser null
-    } as any); // as any para evitar líos con tipos opcionales de TypeORM si no están marcados como nullable
+      path_recibo,         
+      path_form_srt,       
+      path_alta_medica,    
+      path_carta_documento,
+      path_revoca_patrocinio 
+    } as any); 
 
     await this.reclamoRepository.save(nuevoReclamo);
 
@@ -167,8 +147,6 @@ export class ReclamosService {
 
     return { message: '¡Éxito!', codigo_seguimiento };
   }
-
-  // --- RESTO DE MÉTODOS IGUALES ---
 
   async consultarPorCodigo(codigo: string) {
     const reclamo = await this.reclamoRepository.findOne({ where: { codigo_seguimiento: codigo } });
@@ -192,13 +170,10 @@ export class ReclamosService {
 
   async getArchivoUrl(reclamoId: string, tipoArchivo: string) {
 
-    // console.log(`[ReclamosService] Solicitud de descarga: ID=${reclamoId}, TIPO=${tipoArchivo}`);
-
     const mapaColumnas: Record<string, keyof Reclamo> = {
       'dni': 'path_dni',
       'recibo': 'path_recibo',
-      'form1': 'path_form1',
-      'form2': 'path_form2',
+      'formSRT': 'path_form_srt',
       'alta': 'path_alta_medica',
       'carta_documento': 'path_carta_documento',
       'revoca': 'path_revoca_patrocinio'

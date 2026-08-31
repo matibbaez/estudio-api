@@ -28,14 +28,11 @@ export class Reclamo {
   @Column() 
   path_dni: string;
 
-  @Column({ nullable: true }) // <--- AGREGALE ESTO
+  @Column({ nullable: true })
   path_recibo: string;
 
-  @Column({ nullable: true }) // <--- AGREGALE ESTO
-  path_form1: string;
-
-  @Column({ nullable: true }) // <--- AGREGALE ESTO
-  path_form2: string;
+  @Column({ nullable: true }) 
+  path_form_srt: string;
   
   @Column({ nullable: true }) 
   path_alta_medica: string;
