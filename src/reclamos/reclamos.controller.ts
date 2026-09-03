@@ -80,7 +80,7 @@ export class ReclamosController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() body: { estado: 'Recibido' | 'En Proceso' | 'Finalizado' }, 
+    @Body() body: { estado: string }, // <-- Cambialo a string genérico por ahora
   ) {
     return this.reclamosService.update(id, body);
   }
